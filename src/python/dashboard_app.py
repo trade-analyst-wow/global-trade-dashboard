@@ -62,7 +62,230 @@ class TradeDashboard:
     
     def __init__(self):
         self.db_path = project_root / "data" / "sql" / "trade_analysis.db"
+        
+        # Create database directory if it doesn't exist
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Check if database exists, if not create it with sample data
+        if not self.db_path.exists():
+            self._create_database_with_sample_data()
+        
         self.load_data()
+    
+    def _create_database_with_sample_data(self):
+        """Create database with sample data for Streamlit Cloud deployment."""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # Create tables
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS countries (
+                    country_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    country_code TEXT UNIQUE NOT NULL,
+                    country_name TEXT NOT NULL,
+                    region TEXT,
+                    income_group TEXT,
+                    gdp_2022 REAL,
+                    population_2022 INTEGER
+                )
+            ''')
+            
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS trade_data (
+                    trade_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    year INTEGER NOT NULL,
+                    month INTEGER,
+                    reporter_country_id INTEGER,
+                    partner_country_id INTEGER,
+                    commodity_code TEXT,
+                    commodity_description TEXT,
+                    trade_flow TEXT CHECK(trade_flow IN ('import', 'export')),
+                    value_usd REAL,
+                    quantity REAL,
+                    unit TEXT,
+                    source TEXT,
+                    FOREIGN KEY (reporter_country_id) REFERENCES countries (country_id),
+                    FOREIGN KEY (partner_country_id) REFERENCES countries (country_id)
+                )
+            ''')
+            
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS economic_indicators (
+                    indicator_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    country_id INTEGER,
+                    year INTEGER NOT NULL,
+                    quarter INTEGER,
+                    indicator_name TEXT NOT NULL,
+                    indicator_value REAL,
+                    unit TEXT,
+                    source TEXT,
+                    FOREIGN KEY (country_id) REFERENCES countries (country_id)
+                )
+            ''')
+            
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS environmental_metrics (
+                    metric_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    country_id INTEGER,
+                    year INTEGER NOT NULL,
+                    carbon_intensity REAL,
+                    green_trade_share REAL,
+                    transport_emissions REAL,
+                    circular_economy_score REAL,
+                    renewable_energy_trade REAL,
+                    carbon_footprint REAL,
+                    source TEXT,
+                    FOREIGN KEY (country_id) REFERENCES countries (country_id)
+                )
+            ''')
+            
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS tariffs (
+                    tariff_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    country_id INTEGER,
+                    partner_country_id INTEGER,
+                    commodity_code TEXT,
+                    tariff_rate REAL,
+                    tariff_type TEXT,
+                    effective_date TEXT,
+                    source TEXT,
+                    FOREIGN KEY (country_id) REFERENCES countries (country_id),
+                    FOREIGN KEY (partner_country_id) REFERENCES countries (country_id)
+                )
+            ''')
+            
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS sanctions (
+                    sanction_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    sanctioning_country_id INTEGER,
+                    target_country_id INTEGER,
+                    sanction_type TEXT,
+                    description TEXT,
+                    start_date TEXT,
+                    status TEXT,
+                    source TEXT,
+                    FOREIGN KEY (sanctioning_country_id) REFERENCES countries (country_id),
+                    FOREIGN KEY (target_country_id) REFERENCES countries (country_id)
+                )
+            ''')
+            
+            # Insert sample countries
+            countries_data = [
+                ('USA', 'United States', 'North America', 'High income', 25462700, 331002651),
+                ('CHN', 'China', 'Asia', 'Upper middle income', 17963170, 1439323776),
+                ('DEU', 'Germany', 'Europe', 'High income', 4072191, 83190556),
+                ('JPN', 'Japan', 'Asia', 'High income', 4231141, 125836021),
+                ('GBR', 'United Kingdom', 'Europe', 'High income', 3070667, 67215293),
+                ('CAN', 'Canada', 'North America', 'High income', 2139840, 38005238),
+                ('FRA', 'France', 'Europe', 'High income', 2782905, 67391582),
+                ('ITA', 'Italy', 'Europe', 'High income', 2010430, 60461826),
+                ('BRA', 'Brazil', 'South America', 'Upper middle income', 1920095, 212559417),
+                ('IND', 'India', 'Asia', 'Lower middle income', 3385090, 1380004385)
+            ]
+            
+            for country in countries_data:
+                cursor.execute('''
+                    INSERT OR REPLACE INTO countries 
+                    (country_code, country_name, region, income_group, gdp_2022, population_2022)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ''', country)
+            
+            # Insert sample trade data
+            for year in range(2020, 2024):
+                for country_id in range(1, 11):
+                    import_value = 1000000 + (country_id * 500000) + (year - 2020) * 100000
+                    cursor.execute('''
+                        INSERT INTO trade_data 
+                        (year, reporter_country_id, partner_country_id, commodity_code, 
+                         commodity_description, trade_flow, value_usd, source)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (year, country_id, 0, 'TOTAL', 'Total Trade', 'import', import_value, 'Sample Data'))
+                    
+                    export_value = 1200000 + (country_id * 600000) + (year - 2020) * 120000
+                    cursor.execute('''
+                        INSERT INTO trade_data 
+                        (year, reporter_country_id, partner_country_id, commodity_code, 
+                         commodity_description, trade_flow, value_usd, source)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (year, country_id, 0, 'TOTAL', 'Total Trade', 'export', export_value, 'Sample Data'))
+            
+            # Insert sample economic indicators
+            indicators = [
+                'GDP (current US$)', 'GDP growth (annual %)', 'Unemployment Rate (%)',
+                'Inflation Rate (%)', 'Exports (% of GDP)', 'Imports (% of GDP)',
+                'Trade Balance (% of GDP)'
+            ]
+            
+            for year in range(2020, 2024):
+                for country_id in range(1, 11):
+                    for indicator in indicators:
+                        value = 100 + (country_id * 10) + (year - 2020) * 5
+                        cursor.execute('''
+                            INSERT INTO economic_indicators 
+                            (country_id, year, indicator_name, indicator_value, source)
+                            VALUES (?, ?, ?, ?, ?)
+                        ''', (country_id, year, indicator, value, 'Sample Data'))
+            
+            # Insert sample environmental data
+            for year in range(2020, 2024):
+                for country_id in range(1, 11):
+                    cursor.execute('''
+                        INSERT INTO environmental_metrics 
+                        (country_id, year, carbon_intensity, green_trade_share, transport_emissions,
+                         circular_economy_score, renewable_energy_trade, carbon_footprint, source)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        country_id, year,
+                        0.5 + (country_id * 0.1),  # carbon_intensity
+                        0.2 + (country_id * 0.05),  # green_trade_share
+                        1000000 + (country_id * 100000),  # transport_emissions
+                        0.6 + (country_id * 0.03),  # circular_economy_score
+                        500000 + (country_id * 50000),  # renewable_energy_trade
+                        2000000 + (country_id * 200000),  # carbon_footprint
+                        'Sample Data'
+                    ))
+            
+            # Insert sample sanctions data
+            sanctions_data = [
+                (1, 2, 'trade', 'Semiconductor export controls', '2022-10-07', 'active', 'Sample Data'),
+                (1, 9, 'financial', 'Steel and aluminum restrictions', '2021-01-15', 'active', 'Sample Data'),
+                (3, 1, 'trade', 'EU digital services tax', '2023-01-01', 'active', 'Sample Data'),
+                (4, 2, 'financial', 'Technology transfer restrictions', '2023-06-01', 'active', 'Sample Data'),
+                (1, 3, 'arms', 'Military technology restrictions', '2023-03-15', 'active', 'Sample Data'),
+                (2, 1, 'trade', 'Retaliatory tariffs on US goods', '2023-07-01', 'active', 'Sample Data'),
+                (3, 2, 'financial', 'Investment restrictions', '2023-05-20', 'active', 'Sample Data'),
+                (5, 1, 'trade', 'Digital services regulation', '2023-02-10', 'active', 'Sample Data')
+            ]
+            
+            for sanction in sanctions_data:
+                cursor.execute('''
+                    INSERT INTO sanctions 
+                    (sanctioning_country_id, target_country_id, sanction_type, description, start_date, status, source)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ''', sanction)
+            
+            # Insert sample tariffs data
+            tariffs_data = [
+                (1, 2, '0101', 2.5, 'MFN', '2023-01-01', 'Sample Data'),
+                (1, 3, '0101', 0.0, 'preferential', '2023-01-01', 'Sample Data'),
+                (2, 1, '0101', 3.0, 'MFN', '2023-01-01', 'Sample Data'),
+                (3, 1, '0101', 1.5, 'MFN', '2023-01-01', 'Sample Data')
+            ]
+            
+            for tariff in tariffs_data:
+                cursor.execute('''
+                    INSERT INTO tariffs 
+                    (country_id, partner_country_id, commodity_code, tariff_rate, tariff_type, effective_date, source)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ''', tariff)
+            
+            conn.commit()
+            conn.close()
+            
+        except Exception as e:
+            st.error(f"Error creating database: {e}")
+            st.stop()
     
     def create_scrollable_text(self, title, content, height=200):
         """Create a scrollable text box with title and content."""
@@ -887,7 +1110,7 @@ impact models. This limits our ability to make reliable predictions."""
             "Composite Risk Score",
             "Composite Risk = (Trade Risk Score × 0.5) + (Environmental Risk Score × 0.5)",
             "Combined trade and environmental data",
-            "Balanced combination of trade volatility and environmental exposure"
+            "Balanced combination of trade and environmental risks"
         )
         
         self.show_calculation_info(
